@@ -13,6 +13,7 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [summary, setSummary] = useState('');
+  const [videos, setVideos] = useState([]);
   const [isLoading, setIsLoading] = useState(true);  // To manage loading screen
   const [healthCheckStatus, setHealthCheckStatus] = useState(false); // Health check status
   const fileInputRef = useRef(null);
