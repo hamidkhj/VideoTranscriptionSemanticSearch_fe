@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -12,10 +12,46 @@ function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
-  const [videos, setVideos] = useState([]);
   const [summary, setSummary] = useState('');
+  const [isLoading, setIsLoading] = useState(true);  // To manage loading screen
+  const [healthCheckStatus, setHealthCheckStatus] = useState(false); // Health check status
   const fileInputRef = useRef(null);
   const videoRef = useRef(null);
+
+  // Health check function
+  const healthCheck = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health/`);
+      if (response.ok) {
+        setHealthCheckStatus(true);
+      } else {
+        setHealthCheckStatus(false);
+      }
+    } catch (error) {
+      setHealthCheckStatus(false);
+    }
+  };
+
+  // Retry health check every 5 seconds until successful
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!healthCheckStatus) {
+        healthCheck();
+      }
+    }, 5000);
+
+    // Call health check on initial load
+    healthCheck();
+
+    return () => clearInterval(interval); // Cleanup interval
+  }, [healthCheckStatus]);
+
+  // Set isLoading to false once health check is successful
+  useEffect(() => {
+    if (healthCheckStatus) {
+      setIsLoading(false);
+    }
+  }, [healthCheckStatus]);
 
   const handleFileSelect = (event) => {
     const file = event.target.files[0];
@@ -121,7 +157,6 @@ function App() {
     }
   };
 
-
   const handleDownloadSrt = async () => {
     if (!videoId) {
       alert('Video ID not found.');
@@ -150,8 +185,6 @@ function App() {
     }
   };
 
-
-
   React.useEffect(() => {
     loadVideos();
   }, []);
@@ -164,120 +197,111 @@ function App() {
       </header>
 
       <main className="main-content">
-        {/* Video Upload Section */}
-        <section className="upload-section">
-          <h2>Upload Video</h2>
-          <div className="upload-container">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="video/*"
-              onChange={handleFileSelect}
-              className="file-input"
-            />
-            <button
-              onClick={handleUpload}
-              disabled={!selectedFile || isUploading}
-              className="upload-btn"
-            >
-              {isUploading ? 'Processing...' : 'Upload & Process Video'}
-            </button>
+        {isLoading ? (
+          <div className="loading-screen">
+            <p>Loading...</p>
           </div>
+        ) : (
+          <>
+            <section className="upload-section">
+              <h2>Upload Video</h2>
+              <div className="upload-container">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileSelect}
+                  className="file-input"
+                />
+                <button
+                  onClick={handleUpload}
+                  disabled={!selectedFile || isUploading}
+                  className="upload-btn"
+                >
+                  {isUploading ? 'Processing...' : 'Upload & Process Video'}
+                </button>
+              </div>
 
-          {uploadStatus && (
-            <div className={`status-message ${uploadStatus.includes('failed') ? 'error' : 'success'}`}>
-              {uploadStatus}
-            </div>
-          )}
+              {uploadStatus && (
+                <div className={`status-message ${uploadStatus.includes('failed') ? 'error' : 'success'}`}>
+                  {uploadStatus}
+                </div>
+              )}
 
+              {videoId && uploadStatus.includes('successfully') && (
+                <button onClick={handleDownloadSrt} className="download-btn">
+                  Download SRT Subtitle
+                </button>
+              )}
+            </section>
 
-          {videoId && uploadStatus.includes('successfully') && (
-            <button
-              onClick={handleDownloadSrt}
-              className="download-btn"
-            >
-              Download SRT Subtitle
-            </button>
-          )}
-        </section>
+            {videoUrl && (
+              <section className="video-section">
+                <h2>Video Player</h2>
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  controls
+                  className="video-player"
+                  width="100%"
+                  height="400"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              </section>
+            )}
 
-        {/* Video Player Section */}
-        {videoUrl && (
-          <section className="video-section">
-            <h2>Video Player</h2>
-            <video
-              ref={videoRef}
-              src={videoUrl}
-              controls
-              className="video-player"
-              width="100%"
-              height="400"
-            >
-              Your browser does not support the video tag.
-            </video>
-          </section>
-        )}
-
-        {/* Search Section */}
-        {videoId && (
-          <section className="search-section">
-            <h2>Search Video Content</h2>
-            <div className="search-container">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Enter your search query (e.g., 'introduction', 'main points', 'conclusion')"
-                className="search-input"
-                onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              />
-              <button
-                onClick={handleSearch}
-                disabled={isSearching}
-                className="search-btn"
-              >
-                {isSearching ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Search Results Section */}
-        {searchResults.length > 0 && (
-          <section className="results-section">
-            <h2>Search Results</h2>
-            <div className="results-container">
-              {searchResults.map((result, index) => (
-                <div key={index} className="result-item">
-                  <div className="result-header">
-                    <span className="timestamp-badge">
-                      {formatTime(result.chunk.start_time)} - {formatTime(result.chunk.end_time)}
-                    </span>
-                    <span className="similarity-score">
-                      Score: {(result.similarity_score * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <p className="result-text">{result.chunk.text}</p>
-                  <button
-                    onClick={() => jumpToTimestamp(result.chunk.start_time)}
-                    className="jump-btn"
-                  >
-                    Jump to {formatTime(result.chunk.start_time)}
+            {videoId && (
+              <section className="search-section">
+                <h2>Search Video Content</h2>
+                <div className="search-container">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Enter your search query (e.g., 'introduction', 'main points', 'conclusion')"
+                    className="search-input"
+                    onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  />
+                  <button onClick={handleSearch} disabled={isSearching} className="search-btn">
+                    {isSearching ? 'Searching...' : 'Search'}
                   </button>
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              </section>
+            )}
 
-        {/* Summary of the transcription */}
-        {summary && (
-          <section className="results-section">
-            <h2>Transcript Summary</h2>
-            <p className="result-text">{summary}</p>
-          </section>
-        )}
+            {searchResults.length > 0 && (
+              <section className="results-section">
+                <h2>Search Results</h2>
+                <div className="results-container">
+                  {searchResults.map((result, index) => (
+                    <div key={index} className="result-item">
+                      <div className="result-header">
+                        <span className="timestamp-badge">
+                          {formatTime(result.chunk.start_time)} - {formatTime(result.chunk.end_time)}
+                        </span>
+                        <span className="similarity-score">
+                          Score: {(result.similarity_score * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                      <p className="result-text">{result.chunk.text}</p>
+                      <button onClick={() => jumpToTimestamp(result.chunk.start_time)} className="jump-btn">
+                        Jump to {formatTime(result.chunk.start_time)}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
+            {summary && (
+              <section className="results-section">
+                <h2>Transcript Summary</h2>
+                <p className="result-text">{summary}</p>
+              </section>
+            )}
+          </>
+        )}
       </main>
     </div>
   );
